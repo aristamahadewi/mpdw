@@ -1,0 +1,493 @@
+---
+title: "Praktikum 4 MPDW"
+author: "Ni Kadek Arista Mahadewi"
+date: "2026-09-13"
+output: rmdformats::readthedown
+---
+
+# 1. MA(2)
+## Pembangkitan data MA(2) secara manual
+```{r}
+# Pembangkitan White Noise
+set.seed(1234)
+
+n <- 300
+wn <- rnorm(n)
+
+ts.plot(wn)
+```
+```{r}
+# Pembangkitan MA(2) secara manual
+theta1 <- 0.4
+theta2 <- 0.6
+
+ma2 <- c(1:n)
+
+ma2[1] <- wn[1]
+ma2[2] <- wn[2] + theta1 * wn[1]
+
+for (i in 3:n) {
+  ma2[i] <- wn[i] + theta1 * wn[i-1] + theta2 * wn[i-2]
+}
+
+ma2
+```
+## Pembangkitan MA(2) dengan arima.sim()
+```{r}
+# Pembangkitan MA(2) dengan arima.sim
+set.seed(1234)
+
+ma2_sim <- arima.sim(
+  list(order = c(0,0,2),
+       ma = c(0.4, 0.6)),
+  n = 300
+)
+
+ma2_sim
+```
+## Plot Time Series MA(2) 
+Menggunakan hasil manual
+```{r}
+# Plot Time Series MA(2)
+ts.plot(ma2,
+        main = "Time Series MA(2)",
+        ylab = "Yt",
+        xlab = "Waktu")
+```
+Berdasarkan plot time series MA(2), data menunjukkan pola yang berfluktuasi di sekitar nilai rata-rata dan tidak menunjukkan adanya tren naik atau turun yang sistematis. Nilai data bergerak secara acak dari waktu ke waktu, tetapi masih terdapat ketergantungan antara pengamatan dengan beberapa pengamatan sebelumnya. Pola ini sesuai dengan karakteristik proses MA(2), yaitu nilai saat ini dipengaruhi oleh white noise pada waktu sekarang serta dua periode sebelumnya. Oleh karena itu, deret waktu MA(2) dapat dikatakan stasioner karena tidak menunjukkan perubahan rata-rata dan varians yang sistematis sepanjang waktu.
+
+## Plot ACF MA(2)
+```{r}
+# Plot ACF MA(2)
+acf(ma2,
+    main = "ACF MA(2)")
+```
+Pada plot ACF, terlihat adanya korelasi yang cukup kuat pada beberapa lag awal, terutama lag 1 dan lag 2. Setelah lag ke-2, nilai autokorelasi mulai mendekati nol. Pola tersebut sesuai dengan karakteristik proses MA(2), yaitu ACF secara teoritis terputus setelah lag ke-2. Dengan demikian, plot ACF mendukung bahwa data yang dibangkitkan mengikuti karakteristik proses MA(2).
+
+## Plot PACF MA(2)
+```{r}
+# Plot PACF MA(2)
+pacf(ma2,
+     main = "PACF MA(2)")
+```
+Pada plot PACF, korelasi parsial tidak menunjukkan pola terputus secara tegas pada lag ke-2 seperti pada ACF. Nilai PACF cenderung mengecil setelah beberapa lag. Hal ini sesuai dengan karakteristik proses MA(2), di mana PACF umumnya mengalami peluruhan secara bertahap, sedangkan ACF yang mengalami cut-off pada lag ke-2.
+
+## Plot EACF MA(2)
+```{r}
+# Plot EACF MA(2)
+TSA::eacf(ma2)
+```
+Hasil EACF menunjukkan pola yang dapat digunakan untuk mengidentifikasi orde model. Pola pada EACF mengarah pada kombinasi komponen MA dengan orde 2. Hal ini mendukung bahwa model yang digunakan, yaitu MA(2), sesuai dengan pola ketergantungan yang terdapat pada data hasil pembangkitan.
+
+## Scatterplot
+```{r}
+# Membuat lag
+yt_ma2 <- ma2[3:n]
+
+yt_1_ma2 <- ma2[2:(n-1)]
+yt_2_ma2 <- ma2[1:(n-2)]
+
+# Untuk lag 3
+yt_3_ma2 <- ma2[1:(n-3)]
+yt_ma2_3 <- ma2[4:n]
+```
+
+```{r}
+# Scatterplot Yt dengan Yt-1
+plot(yt_1_ma2, yt_ma2[1:length(yt_1_ma2)],
+     main = "Scatterplot Yt dengan Yt-1",
+     xlab = "Yt-1",
+     ylab = "Yt")
+```
+Scatterplot antara Yt dan Yt-1 menunjukkan adanya kecenderungan hubungan positif. Titik-titik data membentuk pola yang cukup menyebar tetapi masih menunjukkan kecenderungan naik. Hal ini menunjukkan bahwa nilai Yt masih memiliki hubungan dengan nilai satu periode sebelumnya. Hubungan tersebut juga sesuai dengan nilai autokorelasi lag 1 yang bernilai positif.
+
+```{r}
+# Scatterplot Yt dengan Yt-2
+plot(yt_2_ma2, ma2[3:n],
+     main = "Scatterplot Yt dengan Yt-2",
+     xlab = "Yt-2",
+     ylab = "Yt")
+```
+Scatterplot antara Yt dan Yt-2 juga menunjukkan kecenderungan hubungan positif. Penyebaran titik masih cukup besar, tetapi terdapat pola hubungan positif antara kedua variabel. Hal ini menunjukkan adanya ketergantungan antara nilai saat ini dengan nilai dua periode sebelumnya, sesuai dengan karakteristik MA(2).
+
+```{r}
+# Scatterplot Yt dengan Yt-3
+plot(yt_3_ma2, yt_ma2_3,
+     main = "Scatterplot Yt dengan Yt-3",
+     xlab = "Yt-3",
+     ylab = "Yt")
+```
+Pada scatterplot antara Yt dan Yt-3, titik-titik terlihat lebih menyebar dan hubungan linear positif tidak sekuat pada lag 1 dan lag 2. Hal ini menunjukkan bahwa hubungan antara Yt dan tiga periode sebelumnya semakin lemah. Kondisi tersebut sesuai dengan karakteristik MA(2), karena pengaruh langsung proses MA secara teoritis berhenti pada lag ke-2.
+
+## Autokorelasi MA(2) dari data bangkitan
+```{r}
+# Autokorelasi hasil bangkitan
+cor(ma2[2:n], ma2[1:(n-1)])
+
+cor(ma2[3:n], ma2[1:(n-2)])
+
+cor(ma2[4:n], ma2[1:(n-3)])
+```
+
+```{r}
+# Korelasi lag 1
+acf_lag1_ma2 <- cor(ma2[2:n], ma2[1:(n-1)])
+acf_lag1_ma2
+
+# Korelasi lag 2
+acf_lag2_ma2 <- cor(ma2[3:n], ma2[1:(n-2)])
+acf_lag2_ma2
+
+# Korelasi lag 3
+acf_lag3_ma2 <- cor(ma2[4:n], ma2[1:(n-3)])
+acf_lag3_ma2
+```
+## Autokorelasi MA(2) secara teoritis
+```{r}
+theta1 <- 0.4
+theta2 <- 0.6
+
+denom_ma2 <- 1 + theta1^2 + theta2^2
+
+rho1_ma2 <- (theta1 + theta1*theta2) / denom_ma2
+rho2_ma2 <- theta2 / denom_ma2
+rho3_ma2 <- 0
+
+rho1_ma2
+rho2_ma2
+rho3_ma2
+```
+
+```{r}
+data.frame(
+  Lag = 1:3,
+  Teoritis = c(rho1_ma2, rho2_ma2, rho3_ma2),
+  Bangkitan = c(acf_lag1_ma2,
+                acf_lag2_ma2,
+                acf_lag3_ma2)
+)
+```
+Hasil autokorelasi data bangkitan menunjukkan bahwa nilai autokorelasi pada lag 1 sebesar 0,5282, lag 2 sebesar 0,4356, dan lag 3 sebesar 0,0854. Nilai pada lag 1 dan lag 2 menunjukkan adanya hubungan positif yang cukup kuat, sedangkan pada lag 3 hubungan tersebut sudah jauh lebih kecil.
+
+Jika dibandingkan dengan nilai teoritis, autokorelasi teoritis pada lag 1 sebesar 0,4211, lag 2 sebesar 0,3947, dan lag 3 sebesar 0. Nilai hasil bangkitan tidak persis sama dengan nilai teoritis karena data yang digunakan merupakan sampel berukuran 300 sehingga terdapat variasi sampel. Namun, pola umumnya tetap sesuai, yaitu korelasi positif pada lag 1 dan lag 2 kemudian mendekati nol pada lag 3.
+
+## Kesimpulan
+Berdasarkan plot time series, ACF, PACF, EACF, scatterplot, serta nilai autokorelasi, data hasil pembangkitan menunjukkan karakteristik proses MA(2). Data bersifat stasioner dan memiliki ketergantungan yang terutama terlihat hingga lag ke-2. Hal ini sesuai dengan model MA(2) yang digunakan.
+
+
+# 2. Proses AR(2)
+## Pembangkitan AR(2) manual
+```{r}
+# White Noise
+set.seed(1234)
+
+n <- 300
+wn <- rnorm(n)
+```
+```{r}
+# Pembangkitan AR(2) secara manual
+phi1 <- 0.5
+phi2 <- 0.2
+
+ar2 <- c(1:n)
+
+ar2[1] <- wn[1]
+ar2[2] <- wn[2] + phi1 * ar2[1]
+
+for (i in 3:n) {
+  ar2[i] <- wn[i] + phi1 * ar2[i-1] + phi2 * ar2[i-2]
+}
+
+ar2
+```
+## Pembangkitan AR(2) dengan arima.sim()
+```{r}
+# Pembangkitan AR(2) dengan arima.sim
+set.seed(1234)
+
+ar2_sim <- arima.sim(
+  list(order = c(2,0,0),
+       ar = c(0.5, 0.2)),
+  n = 300
+)
+
+ar2_sim
+```
+## Plot Time Series
+```{r}
+# Plot Time Series AR(2)
+ts.plot(ar2,
+        main = "Time Series AR(2)",
+        ylab = "Yt",
+        xlab = "Waktu")
+```
+Berdasarkan plot time series AR(2), data berfluktuasi di sekitar rata-rata tanpa menunjukkan adanya tren yang sistematis. Namun, dibandingkan dengan MA(2), pola pergerakan data menunjukkan ketergantungan yang lebih berkelanjutan terhadap pengamatan sebelumnya. Hal ini sesuai dengan karakteristik AR(2), karena nilai saat ini dipengaruhi oleh dua nilai pengamatan sebelumnya. Dengan koefisien φ1 = 0,5 dan φ2 = 0,2, proses AR(2) yang digunakan bersifat stasioner.
+
+## Plot ACF
+```{r}
+# Plot ACF AR(2)
+acf(ar2,
+    main = "ACF AR(2)")
+```
+Pada plot ACF AR(2), terlihat bahwa nilai autokorelasi pada beberapa lag awal cukup besar dan kemudian menurun secara bertahap. Pola tersebut menunjukkan adanya ketergantungan serial yang tidak langsung berhenti pada lag tertentu. Kondisi ini merupakan karakteristik proses AR(2), di mana ACF cenderung mengalami peluruhan secara bertahap.
+
+## Plot PACF
+```{r}
+# Plot PACF AR(2)
+pacf(ar2,
+     main = "PACF AR(2)")
+```
+Pada plot PACF, terdapat korelasi parsial yang cukup kuat hingga sekitar lag ke-2, kemudian nilainya cenderung mengecil. Pola tersebut sesuai dengan karakteristik AR(2), yaitu PACF mengalami cut-off pada orde AR, yaitu lag ke-2.
+
+## Plot EACF
+```{r}
+# Plot EACF AR(2)
+TSA::eacf(ar2)
+```
+Hasil EACF menunjukkan pola yang mendukung adanya komponen autoregressive dengan orde 2. Pola tersebut sesuai dengan model AR(2) yang digunakan dalam pembangkitan data.
+
+## Scatterplot AR(2)
+```{r}
+# Scatterplot Yt dengan Yt-1
+plot(ar2[2:n], ar2[1:(n-1)],
+     main = "Scatterplot Yt dengan Yt-1",
+     xlab = "Yt-1",
+     ylab = "Yt")
+```
+Scatterplot antara Yt dan Yt-1 menunjukkan hubungan positif yang cukup jelas. Titik-titik cenderung membentuk pola naik, yang menunjukkan bahwa nilai Yt memiliki hubungan positif dengan nilai pada satu periode sebelumnya. Hal ini sesuai dengan karakteristik AR(2) dan nilai autokorelasi lag 1 yang relatif besar.
+
+```{r}
+# Scatterplot Yt dengan Yt-2
+plot(ar2[3:n], ar2[1:(n-2)],
+     main = "Scatterplot Yt dengan Yt-2",
+     xlab = "Yt-2",
+     ylab = "Yt")
+```
+Scatterplot antara Yt dan Yt-2 juga menunjukkan hubungan positif. Hubungan tersebut masih terlihat karena nilai Yt tidak hanya dipengaruhi oleh satu periode sebelumnya, tetapi juga oleh dua periode sebelumnya. Pola ini sesuai dengan struktur AR(2).
+
+```{r}
+# Scatterplot Yt dengan Yt-3
+plot(ar2[4:n], ar2[1:(n-3)],
+     main = "Scatterplot Yt dengan Yt-3",
+     xlab = "Yt-3",
+     ylab = "Yt")
+```
+Pada scatterplot Yt dengan Yt-3, hubungan positif masih terlihat, tetapi penyebaran titik lebih besar dibandingkan lag 1 dan lag 2. Hal ini menunjukkan bahwa ketergantungan data masih ada pada lag 3, tetapi pengaruhnya semakin melemah.
+
+## Autokorelasi hasil bangkitan
+```{r}
+# Autokorelasi lag 1
+acf_lag1_ar2 <- cor(ar2[2:n], ar2[1:(n-1)])
+acf_lag1_ar2
+
+# Autokorelasi lag 2
+acf_lag2_ar2 <- cor(ar2[3:n], ar2[1:(n-2)])
+acf_lag2_ar2
+
+# Autokorelasi lag 3
+acf_lag3_ar2 <- cor(ar2[4:n], ar2[1:(n-3)])
+acf_lag3_ar2
+```
+## Autokorelasi AR(2) secara teoritis
+```{r}
+phi1 <- 0.5
+phi2 <- 0.2
+
+rho1_ar2 <- phi1 / (1 - phi2)
+
+rho2_ar2 <- phi1 * rho1_ar2 + phi2
+
+rho3_ar2 <- phi1 * rho2_ar2 + phi2 * rho1_ar2
+
+rho1_ar2
+rho2_ar2
+rho3_ar2
+```
+```{r}
+data.frame(
+  Lag = 1:3,
+  Teoritis = c(rho1_ar2,
+               rho2_ar2,
+               rho3_ar2),
+  Bangkitan = c(acf_lag1_ar2,
+                acf_lag2_ar2,
+                acf_lag3_ar2)
+)
+```
+Hasil autokorelasi data bangkitan menunjukkan nilai sebesar 0,7182 pada lag 1, 0,5890 pada lag 2, dan 0,4630 pada lag 3. Seluruh nilai tersebut positif dan menunjukkan bahwa terdapat hubungan serial yang cukup kuat sampai lag 3.
+
+Secara teoritis, nilai autokorelasi AR(2) adalah 0,6250 pada lag 1, 0,5125 pada lag 2, dan 0,3813 pada lag 3. Nilai hasil bangkitan lebih besar daripada nilai teoritis, tetapi memiliki pola yang sama, yaitu positif dan semakin menurun ketika lag bertambah. Perbedaan tersebut dapat terjadi karena autokorelasi hasil bangkitan dihitung berdasarkan sampel, sedangkan nilai teoritis merupakan nilai berdasarkan parameter model.
+
+## Kesimpulan
+Berdasarkan hasil analisis, data menunjukkan karakteristik proses AR(2). ACF mengalami peluruhan secara bertahap, sedangkan PACF menunjukkan pola yang lebih jelas hingga lag ke-2. Scatterplot juga menunjukkan hubungan positif antara Yt dengan beberapa nilai masa lalu. Dengan demikian, data hasil pembangkitan sesuai dengan karakteristik proses AR(2) dan bersifat stasioner.
+
+# 3. Proses ARMA(2,2)
+## Pembangkitan ARMA(2,2) secara manual
+```{r}
+# White Noise
+set.seed(1234)
+
+n <- 300
+wn <- rnorm(n)
+```
+```{r}
+# Koefisien
+phi1 <- 0.5
+phi2 <- 0.2
+
+theta1 <- 0.4
+theta2 <- 0.6
+```
+```{r}
+# Pembangkitan ARMA(2,2) secara manual
+arma22 <- c(1:n)
+
+arma22[1] <- wn[1]
+
+arma22[2] <- phi1 * arma22[1] +
+             theta1 * wn[1] +
+             wn[2]
+
+for (i in 3:n) {
+  arma22[i] <- phi1 * arma22[i-1] +
+               phi2 * arma22[i-2] +
+               theta1 * wn[i-1] +
+               theta2 * wn[i-2] +
+               wn[i]
+}
+
+arma22
+```
+## Pembangkitan ARMA(2,2) dengan arima.sim()
+```{r}
+# Pembangkitan ARMA(2,2) dengan arima.sim
+set.seed(1234)
+
+arma22_sim <- arima.sim(
+  list(order = c(2,0,2),
+       ar = c(0.5, 0.2),
+       ma = c(0.4, 0.6)),
+  n = 300
+)
+
+arma22_sim
+```
+## Plot Time Series ARMA(2,2)
+```{r}
+ts.plot(arma22,
+        main = "Time Series ARMA(2,2)",
+        ylab = "Yt",
+        xlab = "Waktu")
+```
+Pada plot time series ARMA(2,2), data menunjukkan fluktuasi di sekitar rata-rata tanpa adanya tren sistematis. Nilai data mengalami perubahan dari waktu ke waktu dan menunjukkan adanya ketergantungan dengan nilai sebelumnya. Hal ini sesuai dengan karakteristik ARMA(2,2), yang menggabungkan komponen autoregressive orde 2 dan moving average orde 2.
+
+## Plot ACF
+```{r}
+# Plot ACF ARMA(2,2)
+acf(arma22,
+    main = "ACF ARMA(2,2)")
+```
+Pada plot ACF, terlihat autokorelasi positif yang cukup kuat pada beberapa lag awal dan kemudian mengalami penurunan secara bertahap. Berbeda dengan MA(2), ACF ARMA(2,2) tidak langsung terputus setelah lag ke-2 karena adanya komponen AR. Pola tersebut menunjukkan bahwa pengaruh nilai masa lalu masih terbawa ke beberapa lag berikutnya.
+
+## Plot PACF
+```{r}
+# Plot PACF ARMA(2,2)
+pacf(arma22,
+     main = "PACF ARMA(2,2)")
+```
+Pada plot PACF, terlihat adanya korelasi parsial pada beberapa lag awal dan kemudian mengalami peluruhan. PACF tidak menunjukkan cut-off yang sejelas pada model AR(2) karena model mengandung kombinasi komponen AR dan MA. Oleh karena itu, pola ACF dan PACF secara bersama-sama digunakan untuk menggambarkan karakteristik ARMA(2,2).
+
+## Plot EACF
+```{r}
+# Plot EACF ARMA(2,2)
+TSA::eacf(arma22)
+```
+Hasil EACF menunjukkan pola yang mendukung adanya kombinasi komponen AR dan MA. Pola tersebut digunakan untuk mengidentifikasi orde model dan sesuai dengan struktur ARMA(2,2) yang memiliki komponen AR orde 2 dan MA orde 2. Hasil EACF pada data menunjukkan adanya pola yang dapat mengarah pada model dengan orde tersebut.
+
+## Scatterplot ARMA(2,2)
+```{r}
+# Scatterplot Yt dengan Yt-1
+plot(arma22[2:n], arma22[1:(n-1)],
+     main = "Scatterplot Yt dengan Yt-1",
+     xlab = "Yt-1",
+     ylab = "Yt")
+```
+Scatterplot antara Yt dan Yt-1 menunjukkan hubungan positif yang cukup kuat. Titik-titik cenderung mengikuti pola naik meskipun tetap terdapat penyebaran. Hal ini menunjukkan bahwa nilai saat ini memiliki hubungan dengan nilai satu periode sebelumnya. Hubungan tersebut diperkuat oleh nilai autokorelasi lag 1 yang cukup tinggi.
+
+```{r}
+# Scatterplot Yt dengan Yt-2
+plot(arma22[3:n], arma22[1:(n-2)],
+     main = "Scatterplot Yt dengan Yt-2",
+     xlab = "Yt-2",
+     ylab = "Yt")
+```
+Pada scatterplot Yt dengan Yt-2, hubungan positif masih terlihat dengan penyebaran titik yang lebih besar dibandingkan lag 1. Hal ini menunjukkan bahwa nilai dua periode sebelumnya masih memiliki hubungan dengan nilai saat ini. Kondisi tersebut sesuai dengan adanya komponen AR dalam model ARMA(2,2).
+
+```{r}
+# Scatterplot Yt dengan Yt-3
+plot(arma22[4:n], arma22[1:(n-3)],
+     main = "Scatterplot Yt dengan Yt-3",
+     xlab = "Yt-3",
+     ylab = "Yt")
+```
+Pada scatterplot Yt dengan Yt-3, hubungan positif masih dapat terlihat, tetapi pola titik semakin menyebar. Hal ini menunjukkan bahwa hubungan antara Yt dan pengamatan tiga periode sebelumnya masih ada, tetapi kekuatannya mulai berkurang.
+
+## Autokorelasi hasil bangkitan
+```{r}
+# Autokorelasi lag 1
+acf_lag1_arma22 <- cor(arma22[2:n], arma22[1:(n-1)])
+acf_lag1_arma22
+
+# Autokorelasi lag 2
+acf_lag2_arma22 <- cor(arma22[3:n], arma22[1:(n-2)])
+acf_lag2_arma22
+
+# Autokorelasi lag 3
+acf_lag3_arma22 <- cor(arma22[4:n], arma22[1:(n-3)])
+acf_lag3_arma22
+```
+Hasil autokorelasi data bangkitan ARMA(2,2) menunjukkan nilai 0,8955 pada lag 1, 0,7900 pada lag 2, dan 0,6195 pada lag 3. Nilai tersebut menunjukkan hubungan positif yang cukup kuat pada ketiga lag yang diamati, meskipun nilainya semakin menurun seiring bertambahnya lag.
+
+Nilai teoritis autokorelasi adalah 0,8592 pada lag 1, 0,7492 pada lag 2, dan 0,5464 pada lag 3. Nilai hasil bangkitan lebih tinggi daripada nilai teoritis, tetapi tetap menunjukkan pola yang sama, yaitu autokorelasi positif dan menurun dari lag 1 hingga lag 3.
+
+Perbedaan antara nilai bangkitan dan nilai teoritis merupakan hal yang wajar karena nilai bangkitan diperoleh dari data sampel sebanyak 300 observasi, sedangkan nilai teoritis diperoleh berdasarkan parameter model ARMA(2,2).
+
+## Autokorelasi teoritis ARMA(2,2)
+```{r}
+# Autokorelasi teoritis ARMA(2,2)
+acf_teori_arma22 <- ARMAacf(
+  ar = c(0.5, 0.2),
+  ma = c(0.4, 0.6),
+  lag.max = 3
+)
+
+acf_teori_arma22
+```
+```{r}
+rho1_arma22 <- acf_teori_arma22[2]
+rho2_arma22 <- acf_teori_arma22[3]
+rho3_arma22 <- acf_teori_arma22[4]
+
+rho1_arma22
+rho2_arma22
+rho3_arma22
+```
+```{r}
+data.frame(
+  Lag = 1:3,
+  Teoritis = c(rho1_arma22,
+               rho2_arma22,
+               rho3_arma22),
+  Bangkitan = c(acf_lag1_arma22,
+                acf_lag2_arma22,
+                acf_lag3_arma22)
+)
+```
+Hasil autokorelasi data bangkitan ARMA(2,2) menunjukkan nilai 0,8955 pada lag 1, 0,7900 pada lag 2, dan 0,6195 pada lag 3. Nilai tersebut menunjukkan hubungan positif yang cukup kuat pada ketiga lag yang diamati, meskipun nilainya semakin menurun seiring bertambahnya lag.
+
+Nilai teoritis autokorelasi adalah 0,8592 pada lag 1, 0,7492 pada lag 2, dan 0,5464 pada lag 3. Nilai hasil bangkitan lebih tinggi daripada nilai teoritis, tetapi tetap menunjukkan pola yang sama, yaitu autokorelasi positif dan menurun dari lag 1 hingga lag 3.
+
+Perbedaan antara nilai bangkitan dan nilai teoritis merupakan hal yang wajar karena nilai bangkitan diperoleh dari data sampel sebanyak 300 observasi, sedangkan nilai teoritis diperoleh berdasarkan parameter model ARMA(2,2).
+
+## Kesimpulan
+Berdasarkan plot time series, ACF, PACF, EACF, scatterplot, serta autokorelasi, data menunjukkan karakteristik proses ARMA(2,2). ACF dan PACF sama-sama menunjukkan adanya ketergantungan serial yang kemudian melemah pada lag yang lebih tinggi. Nilai autokorelasi hasil bangkitan juga menunjukkan hubungan positif dari lag 1 hingga lag 3. Dengan demikian, pola data yang dihasilkan sesuai dengan karakteristik model ARMA(2,2).
