@@ -1,0 +1,565 @@
+---
+title: "Tugas ARIMA MPDW"
+author: "Ni Kadek Arista Mahadewi"
+date: "2026-09-25"
+output: rmdformats::readthedown
+---
+
+```{r}
+library(readxl)
+library(forecast)
+library(tseries)
+library(TSA)
+library(lmtest)
+library(MASS)
+library(rio)
+```
+# Import Data
+
+```{r}
+data_raw <- read_excel("C:\\Users\\NI KADEK ARISTA M\\Downloads\\Semester 5\\MPDW\\Data Praktikum MPDW Arista .xlsx",
+                        sheet = "Sheet",
+                        col_names = FALSE)
+
+# Lihat data awal
+head(data_raw)
+```
+
+```{r}
+# Pembersihan data
+data <- data_raw[5:nrow(data_raw), 1:4]
+
+colnames(data) <- c("Tanggal",
+                    "Semua_Provinsi",
+                    "Jawa_Barat",
+                    "Kota_Bogor")
+
+# Ubah tanggal
+data$Tanggal <- as.Date(
+  data$Tanggal,
+  format = "%d/ %m/ %Y"
+)
+
+# Ubah variabel harga menjadi numerik
+data$Semua_Provinsi <- as.numeric(data$Semua_Provinsi)
+data$Jawa_Barat     <- as.numeric(data$Jawa_Barat)
+data$Kota_Bogor     <- as.numeric(data$Kota_Bogor)
+
+# Lihat struktur data
+str(data)
+
+# Statistik deskriptif
+summary(data)
+```
+## Menentukan Variabel yang Dianalisis
+
+```{r}
+y <- data$Semua_Provinsi
+
+# Cek missing value
+sum(is.na(y))
+
+# Cek panjang data
+length(y)
+```
+## Membentuk Time Series
+
+```{r}
+data.ts <- ts(y,
+              frequency = 1)
+
+data.ts
+```
+# Eksplorasi Data
+
+```{r}
+plot.ts(data.ts,
+        lty = 1,
+        xlab = "Waktu",
+        ylab = "Harga Telur Ayam Segar (Rp)",
+        main = "Plot Harga Telur Ayam Segar - Semua Provinsi")
+```
+```{r}
+autoplot(data.ts) +
+  ggplot2::labs(
+    title = "Harga Telur Ayam Segar - Semua Provinsi",
+    x = "Waktu",
+    y = "Harga (Rp)"
+  )
+```
+## Membagi Data Train dan data Test
+
+```{r}
+n <- length(data.ts)
+
+n_train <- floor(0.8 * n)
+
+n_test <- n - n_train
+
+n_train
+n_test
+
+train.ts <- data.ts[1:n_train]
+test.ts <- data.ts[(n_train + 1):n]
+```
+
+Data dibagi menjadi dua bagian, yaitu data training dan data testing. Berdasarkan output, diperoleh 417 observasi sebagai data training dan 105 observasi sebagai data testing. Data training digunakan untuk membangun dan memilih model ARIMA, sedangkan data testing digunakan untuk mengevaluasi kemampuan model dalam melakukan forecasting pada data yang belum digunakan dalam pembentukan model.
+
+```{r}
+# Plot Data Train
+plot.ts(train.ts,
+        lty = 1,
+        xlab = "Waktu",
+        ylab = "Harga Telur Ayam Segar (Rp)",
+        main = "Plot Data Train")
+```
+```{r}
+# Plot Data Test
+plot.ts(test.ts,
+        lty = 1,
+        xlab = "Waktu",
+        ylab = "Harga Telur Ayam Segar (Rp)",
+        main = "Plot Data Test")
+```
+## Cek Stasioner dalam Rataan
+
+```{r}
+acf(train.ts,
+    main = "ACF Data Train")
+```
+```{r}
+# Uji Augmented Dickey-Fuller
+tseries::adf.test(train.ts)
+```
+Hipotesis:
+
+H0: Data tidak stasioner dalam rataan
+H1: Data stasioner dalam rataan
+
+Berdasarkan uji Augmented Dickey-Fuller diperoleh p-value sebesar
+0.01. Karena p-value < 0.05, maka H0 ditolak. Dengan demikian,
+data train dapat dikatakan stasioner dalam rataan.
+
+## Cek Stasioner dalam Ragam
+
+```{r}
+# Cek Stasioner dalam Ragam
+library(MASS)
+
+index <- seq_along(train.ts)
+
+bc <- boxcox(train.ts ~ index,
+             lambda = seq(-2, 2, by = 0.1))
+
+plot(bc,
+     main = "Box-Cox Data Train",
+     xlab = expression(lambda),
+     ylab = "Log-Likelihood")
+```
+```{r}
+# Lambda optimum
+lambda_opt <- bc$x[which.max(bc$y)]
+
+lambda_opt
+```
+Analisis Box-Cox digunakan untuk menentukan transformasi yang sesuai agar ragam data lebih stabil. Nilai lambda optimal yang diperoleh berada pada λ = -2. Nilai tersebut kemudian digunakan sebagai dasar untuk melakukan transformasi Box-Cox terhadap data training.
+
+## Selang kepercayaan Lambda
+
+```{r}
+# Selang kepercayaan 95% untuk lambda
+ci_lambda <- bc$x[
+  bc$y >
+    max(bc$y) - 0.5 * qchisq(0.95, df = 1)
+]
+
+ci_lower <- min(ci_lambda)
+ci_upper <- max(ci_lambda)
+
+c(
+  Batas_Bawah = ci_lower,
+  Batas_Atas = ci_upper
+)
+```
+Karena 1 tidak berada dalam selang [-2.000000, -1.272727], maka lambda = 1 berada di luar selang kepercayaan. Artinya, transformasi Box-Cox diperlukan untuk menstabilkan ragam.
+
+# Penanganan Ketidakstasioneran
+
+## Transformasi Box-Cox
+
+```{r}
+# Transformasi Box-Cox
+lambda_opt <- -2
+
+train.bc <- (train.ts^lambda_opt - 1) / lambda_opt
+
+head(train.bc)
+```
+Karena nilai lambda optimal yang diperoleh adalah -2, data training ditransformasi menggunakan transformasi Box-Cox dengan λ = -2. Transformasi ini dilakukan untuk menstabilkan ragam data sebelum proses identifikasi dan pembentukan model ARIMA.
+
+```{r}
+plot.ts(train.bc,
+        main = "Data Setelah Transformasi Box-Cox",
+        xlab = "Waktu",
+        ylab = "Data Transformasi")
+```
+```{r}
+# Uji ADF setelah transformasi
+tseries::adf.test(train.bc)
+```
+Berdasarkan uji Augmented Dickey-Fuller pada data setelah transformasi Box-Cox, diperoleh p-value sebesar 0.01. Karena p-value < 0.05, maka H₀ ditolak. Dengan demikian, data hasil transformasi Box-Cox telah stasioner dalam rataan.
+
+# Identifikasi Model ARIMA
+
+## ACF data setelah transformasi Box-Cox
+
+```{r}
+acf(
+  train.bc,
+  main = "ACF Data Setelah Transformasi Box-Cox"
+)
+```
+
+Plot ACF digunakan untuk melihat pola korelasi antara nilai pengamatan dengan nilai pada beberapa lag. Pola ACF digunakan sebagai dasar dalam mengidentifikasi kemungkinan orde MA (q) dan membantu menentukan kandidat model ARIMA yang sesuai.
+
+## PACF data setelah transformasi Box-Cox
+
+```{r}
+pacf(
+  train.bc,
+  main = "PACF Data Setelah Transformasi Box-Cox"
+)
+```
+Berdasarkan plot ACF, pola autokorelasi menunjukkan penurunan secara bertahap (tailing off), sedangkan PACF menunjukkan beberapa lag yang signifikan. Pola tersebut mengindikasikan adanya komponen autoregressive (AR). Namun, karena pola ACF dan PACF tidak menunjukkan cut-off yang tegas, penentuan kandidat model selanjutnya dilakukan dengan bantuan EACF.
+
+## EACF data setelah transformasi Box-Cox
+
+```{r}
+TSA::eacf(train.bc)
+```
+Berdasarkan hasil EACF, terdapat beberapa pola o yang membentuk area segitiga pada beberapa kombinasi orde AR dan MA. Kandidat model yang dipertimbangkan antara lain ARIMA(2,0,2), ARIMA(2,0,3), ARIMA(3,0,1), ARIMA(3,0,2), ARIMA(4,0,1), dan ARIMA(4,0,2). Kandidat tersebut selanjutnya akan dibandingkan berdasarkan signifikansi parameter serta nilai AIC dan BIC.
+
+# Kandidat model ARIMA dengan d = 0
+```{r}
+mod_1 <- arima(train.bc, order = c(1, 0, 0))
+mod_2 <- arima(train.bc, order = c(2, 0, 0))
+mod_3 <- arima(train.bc, order = c(2, 0, 2))
+mod_4 <- arima(train.bc, order = c(2, 0, 3))
+mod_5 <- arima(train.bc, order = c(3, 0, 1))
+mod_6 <- arima(train.bc, order = c(3, 0, 2))
+mod_7 <- arima(train.bc, order = c(4, 0, 1))
+mod_8 <- arima(train.bc, order = c(4, 0, 2))
+mod_9  <- arima(train.bc, order = c(5, 0, 2))
+mod_10 <- arima(train.bc, order = c(4, 0, 3))
+mod_11 <- arima(train.bc, order = c(5, 0, 3))
+```
+
+Beberapa kandidat model ARIMA dengan d = 0 dibentuk berdasarkan hasil identifikasi ACF, PACF, dan EACF. Penggunaan d = 0 sesuai dengan hasil uji ADF yang menunjukkan bahwa data telah stasioner dalam rataan. Selanjutnya, kandidat model dibandingkan berdasarkan nilai AIC dan BIC serta pemeriksaan diagnostik residual.
+
+```{r}
+# Melihat ringkasan masing-masing model
+summary(mod_1)
+summary(mod_2)
+summary(mod_3)
+summary(mod_4)
+summary(mod_5)
+summary(mod_6)
+summary(mod_7)
+summary(mod_8)
+summary(mod_9)
+summary(mod_10)
+summary(mod_11)
+```
+
+## Perbandingan AIC dan BIC
+
+```{r}
+# Perbandingan AIC dan BIC
+model_comparison <- data.frame(
+  Model = c(
+    "ARIMA(1,0,0)",
+    "ARIMA(2,0,0)",
+    "ARIMA(2,0,2)",
+    "ARIMA(2,0,3)",
+    "ARIMA(3,0,1)",
+    "ARIMA(3,0,2)",
+    "ARIMA(4,0,1)",
+    "ARIMA(4,0,2)",
+    "ARIMA(5,0,2)",
+    "ARIMA(4,0,3)",
+    "ARIMA(5,0,3)"
+  ),
+  AIC = c(
+    AIC(mod_1),
+    AIC(mod_2),
+    AIC(mod_3),
+    AIC(mod_4),
+    AIC(mod_5),
+    AIC(mod_6),
+    AIC(mod_7),
+    AIC(mod_8),
+    AIC(mod_9),
+    AIC(mod_10),
+    AIC(mod_11)
+  ),
+  BIC = c(
+    BIC(mod_1),
+    BIC(mod_2),
+    BIC(mod_3),
+    BIC(mod_4),
+    BIC(mod_5),
+    BIC(mod_6),
+    BIC(mod_7),
+    BIC(mod_8),
+    BIC(mod_9),
+    BIC(mod_10),
+    BIC(mod_11)
+  )
+)
+
+model_comparison
+```
+Berdasarkan perbandingan AIC dan BIC serta hasil diagnostik residual, ARIMA(5,0,2) (mod_9) dipilih sebagai kandidat model yang digunakan pada tahap selanjutnya. Model ini memiliki nilai AIC paling kecil pada kandidat yang diuji dan, yang lebih penting, menghasilkan residual yang tidak menunjukkan autokorelasi signifikan berdasarkan uji Ljung-Box (p-value = 0,1645 > 0,05). Uji mean residual juga menunjukkan bahwa rata-rata residual tidak berbeda signifikan dari nol (p-value = 0,8383 > 0,05). Meskipun masih terdapat indikasi ketidakteraturan pada varians dan residual belum berdistribusi normal, ARIMA(5,0,2) merupakan model yang paling sesuai untuk dilanjutkan ke tahap forecasting berdasarkan hasil pengujian yang telah dilakukan.
+
+# Overfitting Model
+
+## Menambah Orde AR
+
+```{r}
+# Menambah orde AR dari model ARIMA(5,0,2)
+mod_over_ar <- arima(train.bc,
+                     order = c(6, 0, 2))
+
+# Melihat ringkasan model
+summary(mod_over_ar)
+```
+
+Output: AIC = -9145,34
+
+Nilai AIC ARIMA(6,0,2) lebih kecil daripada ARIMA(5,0,2). Namun, penambahan orde tidak hanya dinilai berdasarkan AIC, tetapi juga berdasarkan signifikansi parameter dan diagnostik residual.
+
+## Menambah Orde MA
+
+```{r}
+# Menambah orde MA dari model ARIMA(5,0,2)
+mod_over_ma <- arima(train.bc,
+                     order = c(5, 0, 3))
+
+# Melihat ringkasan model
+summary(mod_over_ma)
+```
+
+## Uji Signifikasi Parameter
+
+```{r}
+library(lmtest)
+
+# Model awal
+coeftest(mod_9)
+
+# Model dengan penambahan AR
+coeftest(mod_over_ar)
+
+# Model dengan penambahan MA
+coeftest(mod_over_ma)
+```
+
+## Perbandingan AIC dan BIC
+
+```{r}
+model_overfitting <- data.frame(
+  Model = c("ARIMA(5,0,2)",
+            "ARIMA(6,0,2)",
+            "ARIMA(5,0,3)"),
+  AIC = c(AIC(mod_9),
+          AIC(mod_over_ar),
+          AIC(mod_over_ma)),
+  BIC = c(BIC(mod_9),
+          BIC(mod_over_ar),
+          BIC(mod_over_ma))
+)
+
+model_overfitting
+```
+
+## Uji Ljung-Box Residual
+
+```{r}
+# Ljung-Box ARIMA(6,0,2)
+Box.test <- Box.test(residuals(mod_over_ar),
+                     lag = 20,
+                     type = "Ljung-Box")
+Box.test
+
+# Ljung-Box ARIMA(5,0,3)
+Box.test <- Box.test(residuals(mod_over_ma),
+                     lag = 20,
+                     type = "Ljung-Box")
+Box.test
+```
+
+# Model Final 
+
+```{r}
+model_akhir <- forecast::Arima(train.bc,
+                               order = c(5, 0, 2))
+
+model_akhir
+```
+
+```{r}
+hasil_forecast <- forecast::forecast(model_akhir,
+                                    h = length(test.ts))
+
+hasil_forecast
+```
+
+# Forecasting
+
+## Melakukan forecasting
+
+```{r}
+library(forecast)
+
+# Forecast sebanyak periode data testing
+hasil_forecast <- forecast::forecast(
+  model_akhir,
+  h = length(test.ts)
+)
+
+hasil_forecast
+```
+Output menunjukkan bahwa nilai hasil forecast pada skala transformasi berada di sekitar 0,49945 dan secara perlahan menurun. Selain point forecast, output juga menyediakan batas bawah dan batas atas untuk interval prediksi 80% dan 95%.
+
+## Mengembalikan hasil forecast ke skala asli
+
+Karena model dibangun menggunakan data hasil transformasi Box-Cox, hasil forecast perlu dikembalikan ke skala asli menggunakan inverse Box-Cox dengan λ = -2.
+
+```{r}
+lambda_opt <- -2
+
+forecast_asli <- InvBoxCox(
+  hasil_forecast$mean,
+  lambda = lambda_opt
+)
+
+head(forecast_asli)
+```
+## Membandingkan aktual dan forecast
+
+```{r}
+hasil_ramalan <- data.frame(
+  Aktual = as.numeric(test.ts),
+  Forecast = as.numeric(forecast_asli)
+)
+
+head(hasil_ramalan)
+```
+
+Nilai forecast berada cukup dekat dengan nilai aktual pada beberapa observasi awal. Plot aktual dan forecast digunakan untuk melihat secara visual kedekatan pola hasil ramalan terhadap data aktual.
+
+```{r}
+plot(test.ts,
+     type = "l",
+     main = "Perbandingan Data Aktual dan Hasil Forecasting",
+     xlab = "Periode",
+     ylab = "Nilai")
+
+lines(forecast_asli,
+      lty = 2)
+
+legend("topleft",
+       legend = c("Aktual", "Forecast"),
+       lty = c(1, 2))
+```
+
+Secara visual, garis forecast mengikuti pola pergerakan data aktual pada periode pengujian, meskipun terdapat beberapa perbedaan antara nilai aktual dan hasil forecast. Kedekatan kedua garis menunjukkan bahwa model mampu menghasilkan nilai ramalan yang mengikuti pola data aktual. Perbedaan antara garis aktual dan forecast menunjukkan adanya error atau selisih peramalan pada masing-masing periode.
+
+# Evaluasi Forecasting
+
+## Membuat tabel aktual dan forecasting
+
+```{r}
+hasil_ramalan <- data.frame(
+  Aktual = as.numeric(test.ts),
+  Forecast = as.numeric(forecast_asli)
+)
+
+head(hasil_ramalan)
+```
+Nilai forecast berada cukup dekat dengan nilai aktual pada beberapa observasi awal. Plot aktual dan forecast digunakan untuk melihat secara visual kedekatan pola hasil ramalan terhadap data aktual.
+
+## Menghitung MAE
+
+```{r}
+MAE <- mean(abs(hasil_ramalan$Aktual - hasil_ramalan$Forecast))
+
+MAE
+```
+Nilai MAE sebesar 1,162981 menunjukkan rata-rata besarnya kesalahan absolut antara nilai aktual dan hasil forecast adalah sekitar 1,16 satuan.
+
+## Menghitung RMSE
+
+```{r}
+RMSE <- sqrt(mean(
+  (hasil_ramalan$Aktual - hasil_ramalan$Forecast)^2
+))
+
+RMSE
+```
+Nilai RMSE sebesar 1,472466 menunjukkan besarnya kesalahan prediksi dengan memberikan penalti yang lebih besar terhadap kesalahan yang lebih besar.
+
+## Menghitung MAPE
+
+```{r}
+MAPE <- mean(
+  abs((hasil_ramalan$Aktual - hasil_ramalan$Forecast) /
+        hasil_ramalan$Aktual)
+) * 100
+
+MAPE
+```
+Nilai MAPE sebesar 3,628052% menunjukkan bahwa rata-rata kesalahan absolut hasil forecasting relatif terhadap nilai aktual adalah sekitar 3,63%.
+
+## Menampilkan semua ukuran akurasi
+
+```{r}
+akurasi <- data.frame(
+  MAE = MAE,
+  RMSE = RMSE,
+  MAPE = MAPE
+)
+
+akurasi
+```
+
+Ketiga ukuran tersebut digunakan untuk menggambarkan besarnya kesalahan forecasting pada data testing.
+
+## Plot Aktual vs Forecasting
+
+```{r}
+plot(test.ts,
+     type = "l",
+     main = "Aktual vs Forecast",
+     xlab = "Periode",
+     ylab = "Nilai")
+
+lines(forecast_asli,
+      lty = 2)
+
+legend("topleft",
+       legend = c("Aktual", "Forecast"),
+       lty = c(1, 2))
+```
+
+Plot tersebut membandingkan garis aktual dengan garis forecast pada periode pengujian.
+
+Plot ini digunakan untuk melihat secara visual apakah pola hasil ramalan mengikuti pergerakan data aktual. Semakin dekat garis forecast terhadap garis aktual, semakin kecil perbedaan visual antara hasil ramalan dan pengamatan aktual.
+
+# Kesimpulan
+
+Berdasarkan analisis data deret waktu, data yang digunakan terdiri dari 522 observasi dan tidak memiliki missing value pada variabel yang dianalisis. Setelah dilakukan pemeriksaan stasioneritas dan transformasi Box-Cox dengan nilai lambda optimal -2, data memenuhi kondisi stasioner dalam mean sehingga dapat dilanjutkan ke pemodelan ARIMA.
+
+Beberapa kandidat model ARIMA dibandingkan menggunakan AIC, BIC, signifikansi parameter, dan uji Ljung-Box. Berdasarkan hasil tersebut, ARIMA(5,0,2) dipilih sebagai model final karena memiliki AIC terkecil dan residual yang tidak menunjukkan autokorelasi signifikan (p-value Ljung-Box = 0,1645 > 0,05). Namun, masih terdapat indikasi ketidakteraturan varians dan residual belum berdistribusi normal.
+
+Hasil forecasting menunjukkan bahwa nilai ramalan relatif mengikuti nilai aktual. Evaluasi menghasilkan MAE = 1,162981, RMSE = 1,472466, dan MAPE = 3,628052%, yang menunjukkan adanya selisih antara hasil ramalan dan data aktual, dengan rata-rata persentase kesalahan sebesar 3,63%. Dengan demikian, model ARIMA(5,0,2) dapat digunakan untuk melakukan forecasting pada data yang dianalisis, dengan tetap memperhatikan keterbatasan pada karakteristik residual.
